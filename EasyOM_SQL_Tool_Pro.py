@@ -69,8 +69,21 @@ class sqlThread(threading.Thread):
         with open(path, "r", encoding=self.enCode) as f:
             sqls = f.read()
         sqls = noComment(sqls)
+
+        sqls = sqls.replace(";'", "<fenhaoyinhao>")
+
         sqls = sqls.rstrip().rstrip(";")
         sqlList = sqls.split(";")
+
+        sqlList1 = []
+        for sql in sqlList:
+            sql = sql.replace("<fenhaoyinhao>", ";'")
+            sqlList1.append(sql)
+
+        del sqlList
+        sqlList = sqlList1[:]
+        del sqlList1
+
         length = len(sqlList)
         print("\n【线程%d %s】SQL文件'%s'共包含%d个SQL语句" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path, length))
         sqlNo = 0
@@ -264,7 +277,7 @@ def readConf():
 
 def main():
     print("***********************************************")
-    print("*****EasyOM高级数据库脚本批量执行工具 V1.2*****")
+    print("*****EasyOM高级数据库脚本批量执行工具 V1.3*****")
     print("***********************************************")
 
     print("\n作者：戎 晨飞(Chenfei Jovany Rong)\n")
