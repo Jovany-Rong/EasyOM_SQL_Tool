@@ -9,6 +9,9 @@ import cx_Oracle as ora
 import os
 import time
 import threading
+import report
+
+os.environ['NLS_LANG'] = 'SIMPLIFIED CHINESE_CHINA.UTF8'
 
 exList = []
 
@@ -68,7 +71,7 @@ class sqlThread(threading.Thread):
             self.isConn = False
             logText = "\n【线程%d %s】数据库连接失败：%s" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), e)
             print(logText)
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
             with open("error.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
@@ -105,6 +108,34 @@ class sqlThread(threading.Thread):
             #print("\n【线程%d %s】执行SQL文件'%s'中第%d条SQL：\n%s" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path, sqlNo, sql))
             try:
                 self.cr.execute(sql)
+                res = self.cr.fetchall()
+                rpt = report.Report()
+                rpt.appendH4("数据检查结果")
+                tb = report.Table()
+                tb.addHead("大类", "小类", "规则", "等级", "数据量")
+                cont = ""
+                c = "大类\t\t\t\t小类\t\t\t\t规则\t\t\t\t等级\t\t\t\t数据量"
+                cont = cont + c + "\n"
+                #print(c)
+                for row in res:
+                    li = list()
+                    i = 0
+                    tmp = ""
+                    for fld in row:
+                        tmp = tmp + str(fld) + "\t\t\t\t"
+                        li.append(str(fld))
+                        i += 1
+                    #print(tmp)
+                    cont = cont + tmp + "\n"
+                    tb.addRow(li[0], li[1], li[2], li[3], li[4])
+                cont = cont + "\n\nSQL:\n" + sql
+                print(cont)
+                strTemp = tb.makeTable("数据检查结果")
+                rpt.appendHTML(strTemp)
+                rpt.appendH4("检查SQL")
+                rpt.appendParagraph(sql)
+                rpt.makeRpt()
+                
             except Exception as E:
                 errInfo = E
                 print("\n【线程%d %s】SQL执行失败：%s" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), errInfo))
@@ -118,13 +149,13 @@ class sqlThread(threading.Thread):
         if (wrongNo == 0):
             logText = "\n【线程%d %s】SQL文件'%s'所有SQL执行成功，耗时%.2f秒" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path, exTime)
             print(logText)
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
         
         else:
             logText = "\n【线程%d %s】SQL文件'%s'第%d条SQL执行失败，报错信息为：%s" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path, wrongNo, errInfo)
             print(logText)
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
             with open("error.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
@@ -186,10 +217,10 @@ def startThreads(threadNo, pathList, tns, enCode):
 
 def readConf():
     text = ""
-    if not os.path.exists("EasyOM_SQL_Tool_Pro.conf"):
+    if not os.path.exists("EasyOM_DataQC_Report.conf"):
         text = ""
     else:
-        with open("EasyOM_SQL_Tool_Pro.conf", "r", encoding="utf-8") as fr:
+        with open("EasyOM_DataQC_Report.conf", "r", encoding="utf-8") as fr:
             text = fr.read()
 
         print("\n监测到配置文件，正在读取配置文件")
@@ -219,7 +250,7 @@ def readConf():
     if "sqlList" in dd:
         print("\n读取到SQL文件组配置：%s" % dd["sqlList"])
         
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###通过配置文件获取SQL目录### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
         tempList = dd["sqlList"].split(";")
@@ -243,7 +274,7 @@ def readConf():
         dirText = ""
         dirText = input("\n【请输入SQL目录】(包含SQL文件的目录，多个目录用英文逗号【,】隔开)：")
 
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###键入SQL目录 %s ### %s\n" % (dirText, time.strftime('%Y-%m-%d %H:%M:%S')))
 
         dirs = dirText.split(",")
@@ -259,7 +290,7 @@ def readConf():
 
     if "enCode" in dd:
         print("\n读取到文件编码配置：%s" % dd["enCode"])
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###通过配置文件获取文件编码方式 %s ### %s\n" % (dd["enCode"], time.strftime('%Y-%m-%d %H:%M:%S')))
         rDd["enCode"] = dd["enCode"]
     else:
@@ -269,7 +300,7 @@ def readConf():
         if enCode == "":
             enCode = "gb2312"
 
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###键入文件编码方式 %s ### %s\n" % (enCode, time.strftime('%Y-%m-%d %H:%M:%S')))
 
         rDd["enCode"] = enCode
@@ -287,18 +318,18 @@ def readConf():
 
 def main():
     print("***********************************************")
-    print("*****EasyOM高级数据库脚本批量执行工具 V1.4*****")
+    print("*****EasyOM数据质检及报告输出工具 V1.0*****")
     print("***********************************************")
 
     print("\n作者：戎 晨飞(Chenfei Jovany Rong)\n")
-    print("Copyright 2019 Summer Moon Talk\nAll rights reserved.\n")
+    print("Copyright 2020 Summer Moon Talk\nAll rights reserved.\n")
 
     print("""
 【使用须知】
 
     - 本产品属于EasyOM系列运维工具，EasyOM团队保留一切权利
 
-    - 本产品适用于Oracle 11gR2以上版本数据库
+    - 本产品适用于Oracle 11gR2以上版本数据库客户端
 
     - 请根据提示输入相关信息以执行SQL文件组或存入专用配置文件在本程序目录
     
@@ -308,9 +339,9 @@ def main():
 
     os.system("pause")
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+    with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
         fa.write("*******************************************************\n")
-        fa.write("打开EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("打开EasyOM DataQC Report %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
         fa.write("*******************************************************\n")
 
     cfg = readConf()
@@ -324,14 +355,14 @@ def main():
         dbFlag = True
         print("测试连接成功！\n")
         db.close()
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###连接数据库 %s 成功### %s\n" % (tns, time.strftime('%Y-%m-%d %H:%M:%S')))
             
     except Exception as E:
         print(E)
         dbFlag = False
         print("连接失败！\n")
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             fa.write("###连接数据库 %s 失败：%s### %s\n" % (tns, E, time.strftime('%Y-%m-%d %H:%M:%S')))
 
     if dbFlag == True:
@@ -339,7 +370,7 @@ def main():
         #dirText = ""
         #dirText = input("\n【请输入SQL目录】(包含SQL文件的目录，多个目录用英文逗号【,】隔开)：")
 
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        #with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             #fa.write("###键入SQL目录 %s ### %s\n" % (dirText, time.strftime('%Y-%m-%d %H:%M:%S')))
 
         #dirs = dirText.split(",")
@@ -356,7 +387,7 @@ def main():
         #if enCode == "":
             #enCode = "gb2312"
 
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        #with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
             #fa.write("###键入文件编码方式 %s ### %s\n" % (enCode, time.strftime('%Y-%m-%d %H:%M:%S')))
     
         threadNoStr = cfg["threadNo"]
@@ -369,15 +400,15 @@ def main():
             threadNo = int(threadNoStr)
             if threadNo >= 1 and threadNo <= 100:
                 exeFlag = True
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+                with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                     fa.write("###键入启动线程数 %d 成功### %s\n" % (threadNo, time.strftime('%Y-%m-%d %H:%M:%S')))
             else:
                 print("只能输入1-100之间的数字！")
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+                with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                     fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
         except:
             print("只能输入1-100之间的数字！")
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                 fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
         if exeFlag:
@@ -388,14 +419,14 @@ def main():
                 startThreads(threadNo, pathList, tns, enCode)
                 print("\n本组SQL文件执行完毕\n")
             
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
                 fa.write("###所有SQL文件执行完毕### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
     os.system("pause")
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+    with open("EasyOM_DataQC_Report.log", "a+", encoding="utf-8") as fa:
         fa.write("*******************************************************\n")
-        fa.write("关闭EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("关闭EasyOM DataQC Report %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
         fa.write("*******************************************************\n")
 
 

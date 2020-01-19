@@ -17,13 +17,14 @@ tns = ""
 enCode = "utf-8-sig"
 
 class sqlThread(threading.Thread):
-    def __init__(self, threadID, pathList, tns, enCode):
+    def __init__(self, threadID, pathList, tns, enCode, paramDict):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.isConn = False
         self.pathList = pathList
         self.tns = tns
         self.enCode = enCode
+        self.paramDict = paramDict
 
     def run(self):
         print ("\n【线程%d %s】线程开始" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S')))
@@ -34,20 +35,10 @@ class sqlThread(threading.Thread):
                     exList.append(path)
                 
                     print("\n【线程%d %s】开始执行SQL文件'%s'" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path))
-                    
-                    logText = "线程%d : %s\n" % (self.threadID, path)
-                    
-                    with open("executing.log", "a+", encoding="utf-8") as f:
-                        f.write(logText)
                 
                     self.executeSQL(path)
 
                     print("\n【线程%d %s】完成执行SQL文件'%s'" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path))
-
-                    with open("executing.log", "w+", encoding="utf-8") as f:
-                        text = f.read()
-                        text = text.replace(logText, "")
-                        f.write(text)
 
             self.cr.close()
             self.db.close()
@@ -68,7 +59,7 @@ class sqlThread(threading.Thread):
             self.isConn = False
             logText = "\n【线程%d %s】数据库连接失败：%s" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), e)
             print(logText)
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
             with open("error.log", "a+", encoding="utf-8") as fa:
                 fa.write("%s\n" % (logText))
@@ -81,6 +72,8 @@ class sqlThread(threading.Thread):
         sqls = noComment(sqls)
 
         sqls = sqls.replace(";'", "<fenhaoyinhao>")
+
+        sqls = paramRep(sqls, self.paramDict)
 
         sqls = sqls.rstrip().rstrip(";")
         sqlList = sqls.split(";")
@@ -130,6 +123,15 @@ class sqlThread(threading.Thread):
                 fa.write("%s\n" % (logText))
             print("\n【线程%d %s】SQL文件'%s'执行已中止，耗时%.2f秒" % (self.threadID, time.strftime('%Y-%m-%d %H:%M:%S'), path, exTime))  
 
+def paramRep(text, paramDict):
+    for param in paramDict:
+        if paramDict[param] == "lastExeTime":
+            lastExeTime = readLastExeTime()
+            text = text.replace(param, lastExeTime)
+        else:
+            text = text.replace(param, paramDict[param])
+    return text
+
 def noComment(text):
     flag = True
     start = 0
@@ -169,11 +171,11 @@ def findSqlFiles(dirPath):
     
     return pathList
 
-def startThreads(threadNo, pathList, tns, enCode):
+def startThreads(threadNo, pathList, tns, enCode, paramDict):
     begin = time.time()
     thread = []
     for ct in range(threadNo):
-        thread.append(sqlThread(ct + 1, pathList, tns, enCode))
+        thread.append(sqlThread(ct + 1, pathList, tns, enCode, paramDict))
         thread[ct].start()
         
     for ct in range(threadNo):
@@ -184,12 +186,24 @@ def startThreads(threadNo, pathList, tns, enCode):
     spend = end - begin
     print("\n总耗时%.2f秒" % spend)
 
+def readLastExeTime():
+    text = ""
+    if not os.path.exists("lastExeTime.conf"):
+        text = "1970-01-01 00:00:00"
+    else:
+        with open("lastExeTime.conf", "r", encoding="utf-8") as fr:
+            text = fr.read()
+
+    text = text.strip()
+
+    return text
+
 def readConf():
     text = ""
-    if not os.path.exists("EasyOM_SQL_Tool_Pro.conf"):
+    if not os.path.exists("EasyOM_SQL_Tool_WP.conf"):
         text = ""
     else:
-        with open("EasyOM_SQL_Tool_Pro.conf", "r", encoding="utf-8") as fr:
+        with open("EasyOM_SQL_Tool_WP.conf", "r", encoding="utf-8") as fr:
             text = fr.read()
 
         print("\n监测到配置文件，正在读取配置文件")
@@ -219,7 +233,7 @@ def readConf():
     if "sqlList" in dd:
         print("\n读取到SQL文件组配置：%s" % dd["sqlList"])
         
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###通过配置文件获取SQL目录### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
         tempList = dd["sqlList"].split(";")
@@ -243,7 +257,7 @@ def readConf():
         dirText = ""
         dirText = input("\n【请输入SQL目录】(包含SQL文件的目录，多个目录用英文逗号【,】隔开)：")
 
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###键入SQL目录 %s ### %s\n" % (dirText, time.strftime('%Y-%m-%d %H:%M:%S')))
 
         dirs = dirText.split(",")
@@ -259,7 +273,7 @@ def readConf():
 
     if "enCode" in dd:
         print("\n读取到文件编码配置：%s" % dd["enCode"])
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###通过配置文件获取文件编码方式 %s ### %s\n" % (dd["enCode"], time.strftime('%Y-%m-%d %H:%M:%S')))
         rDd["enCode"] = dd["enCode"]
     else:
@@ -269,7 +283,7 @@ def readConf():
         if enCode == "":
             enCode = "gb2312"
 
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###键入文件编码方式 %s ### %s\n" % (enCode, time.strftime('%Y-%m-%d %H:%M:%S')))
 
         rDd["enCode"] = enCode
@@ -283,11 +297,47 @@ def readConf():
         
         rDd["threadNo"] = threadNoStr
 
+    if "param" in dd:
+        print("\n读取到参数配置：%s" % dd["param"])
+        
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
+            fa.write("###通过配置文件获取参数配置：%s %s\n" % (dd["param"], time.strftime('%Y-%m-%d %H:%M:%S')))
+
+        temp = dd["param"].strip()
+        paramDict = dict()
+        
+        ##
+        #print(temp)
+
+        if len(temp) > 0:
+            tmpList = temp.split(",")
+
+            ##
+            #print(tmpList)
+
+            for tmp in tmpList:
+                tmp = tmp.strip()
+
+                ##
+                #print(tmp)
+
+                if (len(tmp) > 0) and (" : " in tmp):
+                    tmpp = tmp.split(" : ")
+                    paramDict[tmpp[0].strip()] = tmpp[1].strip()
+
+        rDd["paramDict"] = paramDict
+    
+    else:
+        rDd["paramDict"] = {}
+
+    ##
+    #print(paramDict)
+
     return rDd
 
 def main():
     print("***********************************************")
-    print("*****EasyOM高级数据库脚本批量执行工具 V1.4*****")
+    print("*****EasyOM数据库脚本自动批量执行工具（带参数） V1.0*****")
     print("***********************************************")
 
     print("\n作者：戎 晨飞(Chenfei Jovany Rong)\n")
@@ -300,17 +350,17 @@ def main():
 
     - 本产品适用于Oracle 11gR2以上版本数据库
 
-    - 请根据提示输入相关信息以执行SQL文件组或存入专用配置文件在本程序目录
+    - 请存入专用配置文件在本程序目录
     
     - 本产品遵循GNU GPL V3.0开源协议，如您同意方可继续使用，否则请退出本程序
 
 """    )
 
-    os.system("pause")
+    #os.system("pause")
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+    with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
         fa.write("*******************************************************\n")
-        fa.write("打开EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("打开EasyOM SQL Tool With Param %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
         fa.write("*******************************************************\n")
 
     cfg = readConf()
@@ -324,42 +374,24 @@ def main():
         dbFlag = True
         print("测试连接成功！\n")
         db.close()
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###连接数据库 %s 成功### %s\n" % (tns, time.strftime('%Y-%m-%d %H:%M:%S')))
             
     except Exception as E:
         print(E)
         dbFlag = False
         print("连接失败！\n")
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+        with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
             fa.write("###连接数据库 %s 失败：%s### %s\n" % (tns, E, time.strftime('%Y-%m-%d %H:%M:%S')))
 
     if dbFlag == True:
         pathLists = cfg["sqlList"]
-        #dirText = ""
-        #dirText = input("\n【请输入SQL目录】(包含SQL文件的目录，多个目录用英文逗号【,】隔开)：")
-
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            #fa.write("###键入SQL目录 %s ### %s\n" % (dirText, time.strftime('%Y-%m-%d %H:%M:%S')))
-
-        #dirs = dirText.split(",")
-
-        #pathLists = []
-
-        #for path in dirs:
-            #path = path.strip()
-            #pathList = findSqlFiles(path)
-            #pathLists.append(pathList)
 
         enCode = cfg["enCode"]
 
-        #if enCode == "":
-            #enCode = "gb2312"
-
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            #fa.write("###键入文件编码方式 %s ### %s\n" % (enCode, time.strftime('%Y-%m-%d %H:%M:%S')))
-    
         threadNoStr = cfg["threadNo"]
+
+        paramDict = cfg["paramDict"]
 
         threadNo = 0
 
@@ -369,35 +401,41 @@ def main():
             threadNo = int(threadNoStr)
             if threadNo >= 1 and threadNo <= 100:
                 exeFlag = True
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+                with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
                     fa.write("###键入启动线程数 %d 成功### %s\n" % (threadNo, time.strftime('%Y-%m-%d %H:%M:%S')))
             else:
                 print("只能输入1-100之间的数字！")
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+                with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
                     fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
         except:
             print("只能输入1-100之间的数字！")
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
                 fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
         if exeFlag:
+            nowExeTime = time.strftime('%Y-%m-%d %H:%M:%S')
             for pathList in pathLists:
                 print("\n执行SQL文件组：\n")
                 for path in pathList:
                     print("\t - %s\n" % path)
-                startThreads(threadNo, pathList, tns, enCode)
+                startThreads(threadNo, pathList, tns, enCode, paramDict)
                 print("\n本组SQL文件执行完毕\n")
             
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+            with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
                 fa.write("###所有SQL文件执行完毕### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
-    os.system("pause")
+            with open('lastExeTime.conf', "w+", encoding='utf-8') as fw:
+                fw.write(nowExeTime)
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-        fa.write("*******************************************************\n")
-        fa.write("关闭EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
-        fa.write("*******************************************************\n")
+            with open('allExeTime.log', "a+", encoding='utf-8') as fa:
+                fa.write(nowExeTime + "\n")
 
+    #os.system("pause")
+
+    with open("EasyOM_SQL_Tool_WP.log", "a+", encoding="utf-8") as fa:
+        fa.write("*******************************************************\n")
+        fa.write("关闭EasyOM SQL Tool With Param %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("*******************************************************\n")
 
 if __name__ == "__main__":
     main()

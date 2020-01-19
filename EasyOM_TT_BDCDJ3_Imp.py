@@ -285,10 +285,123 @@ def readConf():
 
     return rDd
 
+def impNew(tnsRes, tnsFml):
+    
+
+    dbRes = ora.connect(tnsRes)
+    
+    crRes = dbRes.cursor()
+    
+
+    sqlResAll = """
+    select x.xmid, x.qllx, x.bdcdyh, x.slbh from bdc_xm x
+    """
+
+    crRes.execute(sqlResAll)
+    
+    flag = True
+
+    ct = 1
+
+    while flag:
+        row = crRes.fetchone()
+
+        if row == None:
+            row = ["", "", ""]
+
+        if row[0] == None or row[0] == "":
+            flag = False
+            continue
+        xmid = row[0]
+        qllx = row[1]
+        bdcdyh = row[2]
+        slbh = row[3]
+        print("\n【%d】 %s %s %s\n" % (ct, xmid, qllx, bdcdyh))
+
+        if str(qllx) == "4":
+            nowReal = getNowReal(tnsFml, str(bdcdyh), str(slbh))
+            if nowReal[1] != "":
+                makeZxSql("BDC_FDCQ", nowReal[1])
+            if nowReal[0] != "":
+                makeLsgx(tnsRes, xmid, nowReal[0], '1')
+        else:
+            nowReal = getNowReal(tnsFml, str(bdcdyh), str(slbh))
+            if nowReal[0] != "":
+                makeLsgx(tnsRes, xmid, nowReal[0], '0')
+        
+        ct += 1
+
+    sqlZsGx = """
+    insert into bdc_xm_zs_gx
+    SELECT SYS_GUID(),XMID,ZSID FROM(
+SELECT DISTINCT A.XMID, B.ZSID
+  FROM BDC_QLR A,
+       ((SELECT ZSID, BDCQZH FROM BDC_ZS) UNION ALL
+        (SELECT ZSID, BDCQZH FROM BDCDJ.BDC_ZS)) B
+ WHERE A.BDCQZH = B.BDCQZH)
+    """
+    crRes.execute(sqlZsGx)
+    dbRes.commit()
+
+    crRes.close()
+    dbRes.close()
+    print("\nFinish.\n")
+
+
+
+def getNowReal(tns, bdcdyh, slbh):
+    db = ora.connect(tns)
+    cr = db.cursor()
+    sql = """
+    SELECT QLID, XMID FROM(
+SELECT A.*,ROW_NUMBER() OVER(PARTITION BY A.BDCDYH ORDER BY a.DJSJ DESC) SX FROM BDC_FDCQ A 
+inner join bdc_xm x on x.xmid = a.xmid
+where x.slbh != '%s'
+) WHERE SX =1
+and bdcdyh = '%s'
+    """ % (slbh, bdcdyh)
+    cr.execute(sql)
+    row = cr.fetchone()
+    cr.close()
+    db.close()
+    if row == None:
+        row = ['', '']
+    return [row[1], row[0]]
+
+def makeZxSql(ql, qlid):
+    sql = """
+    UPDATE %s T
+    SET T.QSZT = 2
+    WHERE T.QLID = '%s';
+
+    UPDATE BDC_XM X
+    SET X.QSZT = 2
+    WHERE EXISTS (SELECT 1 FROM %s T WHERE T.XMID = X.XMID AND T.QLID = '%s');
+    """ % (ql, qlid, ql, qlid)
+    with open("ZxSql.log", "a+", encoding="utf-8") as fa:
+        fa.write(sql)
+
+def makeLsgx(tns, xmid, yxmid, zxyql):
+    dbL = ora.connect(tns)
+    crL = dbL.cursor()
+
+    sql = """
+    insert into bdc_xm_lsgx (gxid, xmid, yxmid, zxyql)
+    values (sys_guid(), '%s', '%s', %s)
+    """ % (xmid, yxmid, zxyql)
+
+    crL.execute(sql)
+    dbL.commit()
+    crL.close()
+    dbL.close()
+
+
+
+
 def main():
-    print("***********************************************")
-    print("*****EasyOM高级数据库脚本批量执行工具 V1.4*****")
-    print("***********************************************")
+    print("****************************************************")
+    print("*****EasyOM TT增量办结业务历史关系建立及状态处理工具*****")
+    print("****************************************************")
 
     print("\n作者：戎 晨飞(Chenfei Jovany Rong)\n")
     print("Copyright 2019 Summer Moon Talk\nAll rights reserved.\n")
@@ -299,8 +412,6 @@ def main():
     - 本产品属于EasyOM系列运维工具，EasyOM团队保留一切权利
 
     - 本产品适用于Oracle 11gR2以上版本数据库
-
-    - 请根据提示输入相关信息以执行SQL文件组或存入专用配置文件在本程序目录
     
     - 本产品遵循GNU GPL V3.0开源协议，如您同意方可继续使用，否则请退出本程序
 
@@ -308,94 +419,49 @@ def main():
 
     os.system("pause")
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+    with open("EasyOM_TT_BDCDJ3_Imp.log", "a+", encoding="utf-8") as fa:
         fa.write("*******************************************************\n")
-        fa.write("打开EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("打开EasyOM TT增量办结业务历史关系建立及状态处理工具 %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
         fa.write("*******************************************************\n")
 
-    cfg = readConf()
+    #cfg = readConf()
 
-    tns = cfg["tns"]
+    #tns = cfg["tns"]
+
+    tnsRes = "ttzlsj/gtis@200.1.1.172/orcl"
+    tnsFml = "bdcdj_3/HFbdcdj137de@192.168.65.9/orcl"
 
     dbFlag = False
 
     try:
-        db = ora.connect(tns)
+        dbRes = ora.connect(tnsRes)
+        dbFml = ora.connect(tnsFml)
         dbFlag = True
         print("测试连接成功！\n")
-        db.close()
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            fa.write("###连接数据库 %s 成功### %s\n" % (tns, time.strftime('%Y-%m-%d %H:%M:%S')))
+        dbRes.close()
+        dbFml.close()
+        with open("EasyOM_TT_BDCDJ3_Imp.log", "a+", encoding="utf-8") as fa:
+            fa.write("###连接数据库成功### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
             
     except Exception as E:
         print(E)
         dbFlag = False
         print("连接失败！\n")
-        with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            fa.write("###连接数据库 %s 失败：%s### %s\n" % (tns, E, time.strftime('%Y-%m-%d %H:%M:%S')))
+        with open("EasyOM_TT_BDCDJ3_Imp.log", "a+", encoding="utf-8") as fa:
+            fa.write("###连接数据库失败：%s### %s\n" % (E, time.strftime('%Y-%m-%d %H:%M:%S')))
 
     if dbFlag == True:
-        pathLists = cfg["sqlList"]
-        #dirText = ""
-        #dirText = input("\n【请输入SQL目录】(包含SQL文件的目录，多个目录用英文逗号【,】隔开)：")
 
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            #fa.write("###键入SQL目录 %s ### %s\n" % (dirText, time.strftime('%Y-%m-%d %H:%M:%S')))
-
-        #dirs = dirText.split(",")
-
-        #pathLists = []
-
-        #for path in dirs:
-            #path = path.strip()
-            #pathList = findSqlFiles(path)
-            #pathLists.append(pathList)
-
-        enCode = cfg["enCode"]
-
-        #if enCode == "":
-            #enCode = "gb2312"
-
-        #with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-            #fa.write("###键入文件编码方式 %s ### %s\n" % (enCode, time.strftime('%Y-%m-%d %H:%M:%S')))
-    
-        threadNoStr = cfg["threadNo"]
-
-        threadNo = 0
-
-        exeFlag = False
-
-        try:
-            threadNo = int(threadNoStr)
-            if threadNo >= 1 and threadNo <= 100:
-                exeFlag = True
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-                    fa.write("###键入启动线程数 %d 成功### %s\n" % (threadNo, time.strftime('%Y-%m-%d %H:%M:%S')))
-            else:
-                print("只能输入1-100之间的数字！")
-                with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-                    fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
-        except:
-            print("只能输入1-100之间的数字！")
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-                fa.write("###键入的线程数不符合要求### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
-
-        if exeFlag:
-            for pathList in pathLists:
-                print("\n执行SQL文件组：\n")
-                for path in pathList:
-                    print("\t - %s\n" % path)
-                startThreads(threadNo, pathList, tns, enCode)
-                print("\n本组SQL文件执行完毕\n")
+        impNew(tnsRes, tnsFml)
             
-            with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
-                fa.write("###所有SQL文件执行完毕### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
+        with open("EasyOM_TT_BDCDJ3_Imp.log", "a+", encoding="utf-8") as fa:
+            fa.write("###所有SQL文件执行完毕### %s\n" % (time.strftime('%Y-%m-%d %H:%M:%S')))
 
     os.system("pause")
 
-    with open("EasyOM_SQL_Tool.log", "a+", encoding="utf-8") as fa:
+    with open("EasyOM_TT_BDCDJ3_Imp.log", "a+", encoding="utf-8") as fa:
         fa.write("*******************************************************\n")
-        fa.write("关闭EasyOM SQL Tool Pro %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
+        fa.write("关闭EasyOM TT增量办结业务历史关系建立及状态处理工具 %s\n" % time.strftime('%Y-%m-%d %H:%M:%S'))
         fa.write("*******************************************************\n")
 
 

@@ -1,0 +1,8 @@
+
+【线程1 2020-01-15 18:58:21】SQL文件'GX5.sql'第1条SQL执行失败，报错信息为：'ascii' codec can't encode characters in position 12-20: ordinal not in range(128)
+
+【线程1 2020-01-16 08:44:01】SQL文件'GX5.sql'第1条SQL执行失败，报错信息为：list assignment index out of range
+
+【线程1 2020-01-16 08:44:58】SQL文件'GX5.sql'第1条SQL执行失败，报错信息为：list assignment index out of range
+
+【线程1 2020-01-16 08:46:34】SQL文件'GX5.sql'第1条SQL执行失败，报错信息为：[Errno 2] No such file or directory: 'Output/EasyOM_DataQC_Report_2020-01-16_08-46-34.html'
